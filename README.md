@@ -270,7 +270,40 @@ Difficulté : Moyenne (~2 heures)
 ### **Atelier 2 : Choisir notre point de restauration**  
 Aujourd’hui nous restaurobs “le dernier backup”. Nous souhaitons **ajouter la capacité de choisir un point de restauration**.
 
-*..Décrir ici votre procédure de restauration (votre runbook)..*  
+1. Lister les points de restauration disponibles
+Avant de restaurer, nous devons identifier les fichiers présents dans le volume de sauvegarde.
+Exécutez cette commande pour lister les backups :
+kubectl -n pra exec -it deployment/flask -- ls -lh /backup
+
+2. Configurer le Job de restauration
+Ouvrez le fichier k8s/50-job-restore.yaml dans votre éditeur. Vous devez modifier la commande de copie pour cibler votre fichier.
+command: ["/bin/sh", "-c", "cp /backup/app.db.bak /data/app.db"]
+
+Version modifiée (Manuelle) :
+Remplacez app.db.bak par le nom du fichier identifié à l'étape 1 :
+command: ["/bin/sh", "-c", "cp /backup/app.db.bak.2026-04-20_15-00 /data/app.db"]
+3. Exécuter la restauration
+Pour éviter tout conflit d'écriture, nous suivons cette séquence :
+
+Mettre l'application en pause (Scaledown) :
+kubectl -n pra scale deployment flask --replicas=0
+
+Supprimer l'ancien Job s'il existe :
+kubectl -n pra delete job sqlite-restore --ignore-not-found
+
+Lancer le nouveau Job de restauration :
+kubectl apply -f k8s/50-job-restore.yaml
+
+Vérifier la réussite :
+kubectl -n pra get pods # Attendre que sqlite-restore soit 'Completed'
+
+4. Relancer la production
+Une fois la restauration terminée, remontez l'application :
+kubectl -n pra scale deployment flask --replicas=1
+
+5. Vérification finale
+Vérifiez que les données correspondent au point de restauration choisi :
+curl localhost:8080/status
   
 ---------------------------------------------------
 Evaluation
